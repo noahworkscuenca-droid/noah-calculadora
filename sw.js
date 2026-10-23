@@ -2,7 +2,7 @@
 // (nunca datos del usuario) para que abra al instante y funcione sin conexión.
 // Estrategia: muestra la copia guardada y la actualiza en segundo plano.
 // Subí CACHE_NAME cuando publiques una versión nueva.
-const CACHE_NAME = 'noah-calc-v2';
+const CACHE_NAME = 'noah-calc-v3';
 const APP_SHELL = [
   './',
   './index.html',

@@ -24,23 +24,6 @@
 </head>
 <body>
 
-<!-- Pantalla de bloqueo (solo si el usuario activó un PIN) -->
-<div class="lock hidden" id="lockScreen" role="dialog" aria-modal="true" aria-labelledby="lockTitle">
-  <div class="lock-card">
-    <h2 id="lockTitle">Datos protegidos</h2>
-    <p>Ingresá tu PIN para ver tus proyecciones guardadas en este dispositivo.</p>
-    <div class="field">
-      <label for="lockPin">PIN</label>
-      <input type="password" id="lockPin" inputmode="numeric" autocomplete="off">
-      <span class="err" id="lockErr"></span>
-    </div>
-    <div class="actions">
-      <button class="ghost primary" id="unlockBtn" type="button">Desbloquear</button>
-      <button class="ghost danger" id="forgotBtn" type="button">Olvidé el PIN</button>
-    </div>
-  </div>
-</div>
-
 <div class="wrap">
 
   <header>
@@ -182,25 +165,8 @@
   </div>
 
   <div class="panel">
-    <h2>Privacidad en este dispositivo <span class="status-pill" id="pinStatus">Sin PIN</span></h2>
-    <p class="hint">Tus datos nunca salen de este dispositivo: se guardan solo acá y no se envían a ningún servidor. Con un PIN además quedan cifrados, para que nadie que use este teléfono o computadora pueda verlos. Si olvidás el PIN, los datos no se pueden recuperar.</p>
-    <div id="pinSetup">
-      <div class="pin-row">
-        <div class="field"><label for="pinNew">Nuevo PIN (mín. 6 dígitos)</label><input type="password" id="pinNew" inputmode="numeric" autocomplete="new-password"></div>
-        <div class="field"><label for="pinConfirm">Repetir PIN</label><input type="password" id="pinConfirm" inputmode="numeric" autocomplete="new-password"></div>
-      </div>
-      <div class="actions">
-        <button class="ghost primary" id="pinEnableBtn" type="button">Activar PIN</button>
-      </div>
-    </div>
-    <div id="pinActive" class="hidden">
-      <div class="actions">
-        <button class="ghost primary" id="lockNowBtn" type="button">Bloquear ahora</button>
-        <button class="ghost" id="pinDisableBtn" type="button">Quitar PIN</button>
-      </div>
-      <p class="note">Se bloquea solo después de 5 minutos fuera de la app.</p>
-    </div>
-    <p class="note hidden" id="pinMsg"></p>
+    <h2>Privacidad en este dispositivo</h2>
+    <p class="hint">Tus datos nunca salen de este dispositivo: se guardan solo acá y no se envían a ningún servidor.</p>
     <div class="actions">
       <button class="ghost danger" id="clearAllBtn" type="button">Borrar todos mis datos de este dispositivo</button>
     </div>

@@ -216,14 +216,3 @@
   tbody input::placeholder{ color: var(--text-faint); }
   .note{ color: var(--text-dim); font-size:0.78rem; margin-top:10px; }
   .note.show-warn{ color: var(--warn); }
-  .pin-row{ display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; }
-  .pin-row .field{ flex: 1 1 160px; }
-  .status-pill{ display:inline-block; font-size:0.72rem; padding:2px 8px; border-radius:999px; border:1px solid var(--line); color: var(--text-dim); margin-left:8px; vertical-align:middle; }
-  .status-pill.on{ border-color: var(--accent); color: var(--accent); }
-  .lock{ position:fixed; inset:0; background: var(--bg); z-index:50; display:flex; align-items:center; justify-content:center; padding:24px; }
-  .lock-card{ width:100%; max-width:360px; background: var(--panel); border:1px solid var(--line); border-radius: var(--radius); padding:24px; }
-  .lock-card h2{ margin:0 0 6px; font-size:1.05rem; }
-  .lock-card p{ color: var(--text-dim); font-size:0.82rem; margin:0 0 16px; }
-  .lock-card .field{ margin-bottom:12px; }
-  .lock-card .actions{ justify-content:space-between; }
-  body.locked .wrap{ visibility:hidden; }

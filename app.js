@@ -1,4 +1,4 @@
-/* Noah — Calculadora de interés compuesto (v2)
+/* Noah — Calculadora de interés compuesto (v3)
  *
  * Privacidad: todo el cálculo y el guardado ocurren en este dispositivo.
  * No hay llamadas de red con datos del usuario; la política CSP del index.html
@@ -16,8 +16,6 @@
   const MAX_YEARS = 100;
   const STORAGE_KEY = 'noahCalc_state_v2';
   const LEGACY_KEY = 'noahCalc_state_v1';
-  const AUTOLOCK_MS = 5 * 60 * 1000;
-  const PBKDF2_ITER = 600000;
   const SVGNS = 'http://www.w3.org/2000/svg';
 
   const VALUE_IDS = ['capital', 'inflacion', 'rendBruto', 'moneda', 'totalYears',
@@ -28,10 +26,6 @@
   let ov = {};
   let view = 'anual';
 
-  // Estado de seguridad
-  let cryptoKey = null;      // clave AES en memoria (solo si hay PIN)
-  let pinSalt = null;
-  let locked = false;
   let ready = false;         // false hasta cargar datos: evita sobrescribir lo guardado
   let userChanged = false;   // para mostrar "Guardado" solo tras cambios del usuario
 
@@ -457,36 +451,18 @@
     } catch (e) { return null; }
   }
 
-  const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
-  const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
-
-  async function deriveKey(pin, salt) {
-    const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveKey']);
-    return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: PBKDF2_ITER, hash: 'SHA-256' },
-      base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
-  }
-
   let saveTimer = null;
   function saveState() {
-    if (!ready || locked) return;
+    if (!ready) return;
     clearTimeout(saveTimer);
     saveTimer = setTimeout(saveNow, 300);
   }
 
-  async function saveNow() {
+  function saveNow() {
     clearTimeout(saveTimer);
-    const st = storage(); if (!st || !ready || locked) return;
+    const st = storage(); if (!st || !ready) return;
     try {
-      const data = collect();
-      let env;
-      if (cryptoKey) {
-        const iv = crypto.getRandomValues(new Uint8Array(12));
-        const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, cryptoKey, new TextEncoder().encode(JSON.stringify(data)));
-        env = { v: 2, enc: true, salt: b64(pinSalt), iter: PBKDF2_ITER, iv: b64(iv), ct: b64(ct) };
-      } else {
-        env = { v: 2, enc: false, data };
-      }
-      st.setItem(STORAGE_KEY, JSON.stringify(env));
+      st.setItem(STORAGE_KEY, JSON.stringify({ v: 2, data: collect() }));
       if (userChanged) showSaved();
     } catch (e) { /* almacenamiento lleno o bloqueado: se sigue sin guardar */ }
   }
@@ -507,91 +483,17 @@
       if (legacy) {
         const d = migrateV1(legacy);
         st.removeItem(LEGACY_KEY);
-        if (d) return { v: 2, enc: false, data: d, migrated: true };
+        if (d) return { v: 2, data: d, migrated: true };
       }
     } catch (e) { /* datos corruptos: se arranca de cero */ }
     return null;
-  }
-
-  // ---------------------------------------------------------------- PIN
-  function updatePinUi() {
-    const on = !!cryptoKey;
-    $('pinStatus').textContent = on ? 'PIN activo · datos cifrados' : 'Sin PIN';
-    $('pinStatus').classList.toggle('on', on);
-    $('pinSetup').classList.toggle('hidden', on);
-    $('pinActive').classList.toggle('hidden', !on);
-  }
-  function pinMsg(text, warn) {
-    const n = $('pinMsg');
-    n.textContent = text || '';
-    n.classList.toggle('hidden', !text);
-    n.classList.toggle('show-warn', !!warn);
-  }
-
-  async function enablePin() {
-    const a = $('pinNew').value, b = $('pinConfirm').value;
-    if (a.length < 6) return pinMsg('El PIN debe tener al menos 6 caracteres.', true);
-    if (a !== b) return pinMsg('Los PIN no coinciden.', true);
-    pinMsg('Cifrando…');
-    pinSalt = crypto.getRandomValues(new Uint8Array(16));
-    cryptoKey = await deriveKey(a, pinSalt);
-    $('pinNew').value = ''; $('pinConfirm').value = '';
-    await saveNow();
-    updatePinUi();
-    pinMsg('PIN activado. Tus datos quedaron cifrados en este dispositivo.');
-  }
-
-  async function disablePin() {
-    if (!confirm('¿Quitar el PIN? Tus datos seguirán en este dispositivo, pero sin cifrar.')) return;
-    cryptoKey = null; pinSalt = null;
-    await saveNow();
-    updatePinUi();
-    pinMsg('PIN quitado.');
-  }
-
-  async function lockNow() {
-    if (!cryptoKey) return;
-    await saveNow();
-    location.reload();   // recarga para borrar los datos descifrados de la memoria
-  }
-
-  let failCount = 0, retryAt = 0;
-  async function tryUnlock(env) {
-    const err = $('lockErr');
-    const wait = retryAt - Date.now();
-    if (wait > 0) { err.textContent = 'Esperá ' + Math.ceil(wait / 1000) + ' s antes de reintentar.'; return; }
-    const pin = $('lockPin').value;
-    if (!pin) return;
-    err.textContent = 'Verificando…';
-    $('unlockBtn').disabled = true;
-    try {
-      const salt = unb64(env.salt);
-      const key = await deriveKey(pin, salt);
-      const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(env.iv) }, key, unb64(env.ct));
-      const data = JSON.parse(new TextDecoder().decode(pt));
-      cryptoKey = key; pinSalt = salt; locked = false; failCount = 0;
-      $('lockPin').value = ''; err.textContent = '';
-      $('lockScreen').classList.add('hidden');
-      document.body.classList.remove('locked');
-      applyData(data);
-      ready = true;
-      updatePinUi();
-      render();
-    } catch (e) {
-      failCount++;
-      retryAt = Date.now() + Math.min(30000, 1000 * Math.pow(2, failCount - 1));
-      err.textContent = 'PIN incorrecto.';
-      $('lockPin').select();
-    } finally {
-      $('unlockBtn').disabled = false;
-    }
   }
 
   function clearAll(msg) {
     if (!confirm(msg)) return;
     const st = storage();
     if (st) { try { st.removeItem(STORAGE_KEY); st.removeItem(LEGACY_KEY); } catch (e) { /* nada */ } }
-    cryptoKey = null; ready = false;
+    ready = false;
     location.reload();
   }
 
@@ -607,36 +509,16 @@
     $('applyRangeBtn').addEventListener('click', applyRange);
     $('btnAnual').addEventListener('click', () => setView('anual'));
     $('btnMensual').addEventListener('click', () => setView('mensual'));
-    $('pinEnableBtn').addEventListener('click', enablePin);
-    $('pinDisableBtn').addEventListener('click', disablePin);
-    $('lockNowBtn').addEventListener('click', lockNow);
     $('clearAllBtn').addEventListener('click', () =>
-      clearAll('¿Borrar todos tus datos de este dispositivo (y el PIN, si hay)? No se puede deshacer.'));
-    $('forgotBtn').addEventListener('click', () =>
-      clearAll('Sin el PIN no hay forma de recuperar los datos cifrados. ¿Borrarlos y empezar de cero?'));
-
-    let hiddenAt = 0;
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) { hiddenAt = Date.now(); saveNow(); }
-      else if (cryptoKey && hiddenAt && Date.now() - hiddenAt > AUTOLOCK_MS) lockNow();
-    });
+      clearAll('¿Borrar todos tus datos de este dispositivo? No se puede deshacer.'));
+    document.addEventListener('visibilitychange', () => { if (document.hidden) saveNow(); });
   }
 
   function start() {
     bind();
     const env = readEnvelope();
-    if (env && env.enc) {
-      locked = true;
-      document.body.classList.add('locked');
-      $('lockScreen').classList.remove('hidden');
-      $('unlockBtn').addEventListener('click', () => tryUnlock(env));
-      $('lockPin').addEventListener('keydown', (e) => { if (e.key === 'Enter') tryUnlock(env); });
-      $('lockPin').focus();
-      return;
-    }
-    if (env && env.data) applyData(env.data);
+    if (env && env.data) applyData(env.data);   // datos cifrados de la versión con PIN: no se pueden leer, se ignoran
     ready = true;
-    updatePinUi();
     render();
     if (env && env.migrated) saveNow();
   }
