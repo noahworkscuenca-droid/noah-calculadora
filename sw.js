@@ -2,7 +2,7 @@
 // (nunca datos del usuario) para que abra al instante y funcione sin conexión.
 // Estrategia: muestra la copia guardada y la actualiza en segundo plano.
 // Subí CACHE_NAME cuando publiques una versión nueva.
-const CACHE_NAME = 'noah-calc-v3';
+const CACHE_NAME = 'noah-calc-v4';
 const APP_SHELL = [
   './',
   './index.html',
@@ -16,7 +16,9 @@ const APP_SHELL = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
+  // cache: 'reload' evita copiar versiones viejas desde la caché HTTP del navegador.
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) =>
+    cache.addAll(APP_SHELL.map((u) => new Request(u, { cache: 'reload' })))));
   self.skipWaiting();
 });
 
@@ -36,7 +38,11 @@ self.addEventListener('fetch', (event) => {
   event.respondWith((async () => {
     const cache = await caches.open(CACHE_NAME);
     const cached = await cache.match(req, { ignoreSearch: true });
-    const network = fetch(req).then((res) => {
+    // Pide siempre la versión vigente al servidor (no la caché HTTP de 10 min de GitHub Pages).
+    const netReq = req.mode === 'navigate'
+      ? new Request(req.url, { cache: 'no-cache' })
+      : new Request(req, { cache: 'no-cache' });
+    const network = fetch(netReq).then((res) => {
       if (res && res.status === 200 && res.type === 'basic') cache.put(req, res.clone());
       return res;
     }).catch(() => null);
