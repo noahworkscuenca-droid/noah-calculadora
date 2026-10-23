@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Seguridad: solo se permite cargar código y recursos de este mismo sitio.
+     Nada de scripts externos, ni envío de datos a otros servidores. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; manifest-src 'self'; worker-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Calculadora de interés compuesto</title>
+<link rel="stylesheet" href="app.css">
+
+<!-- PWA: instalable como app desde el navegador -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0F1419">
+<meta name="description" content="Proyección de capital, depósitos y retiros con interés compuesto.">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Noah">
+<script src="app.js" defer></script>
+</head>
+<body>
+
+<!-- Pantalla de bloqueo (solo si el usuario activó un PIN) -->
+<div class="lock hidden" id="lockScreen" role="dialog" aria-modal="true" aria-labelledby="lockTitle">
+  <div class="lock-card">
+    <h2 id="lockTitle">Datos protegidos</h2>
+    <p>Ingresá tu PIN para ver tus proyecciones guardadas en este dispositivo.</p>
+    <div class="field">
+      <label for="lockPin">PIN</label>
+      <input type="password" id="lockPin" inputmode="numeric" autocomplete="off">
+      <span class="err" id="lockErr"></span>
+    </div>
+    <div class="actions">
+      <button class="ghost primary" id="unlockBtn" type="button">Desbloquear</button>
+      <button class="ghost danger" id="forgotBtn" type="button">Olvidé el PIN</button>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <header>
+    <div>
+      <h1>Calculadora de interés compuesto</h1>
+      <p class="subtitle">Depositá o retirá cuando quieras — cada año o mes es libre de ajustar.</p>
+    </div>
+    <div class="toggle" role="group" aria-label="Vista">
+      <button type="button" id="btnAnual" class="active">Anual</button>
+      <button type="button" id="btnMensual">Mensual</button>
+    </div>
+  </header>
+
+  <div class="summary">
+    <div class="cell"><div class="k">Capital final proyectado</div><div class="v accent" id="sumFinal">—</div></div>
+    <div class="cell"><div class="k">Generado por interés</div><div class="v" id="sumInteres">—</div></div>
+    <div class="cell"><div class="k">Total depositado</div><div class="v" id="sumDepositos">—</div></div>
+    <div class="cell"><div class="k">Total retirado</div><div class="v" id="sumRetiros">—</div></div>
+    <div class="cell"><div class="k">Rendimiento real anual</div><div class="v" id="sumRendReal">—</div></div>
+  </div>
+
+  <div class="panel">
+    <h2>Supuestos</h2>
+    <p class="hint">Base del cálculo — el rendimiento real se ajusta automáticamente por inflación. El interés se capitaliza mes a mes en ambas vistas.</p>
+    <div class="grid">
+      <div class="field">
+        <label for="capital">Capital inicial</label>
+        <input type="number" id="capital" value="2000" step="100" min="0">
+        <span class="err" id="err-capital"></span>
+      </div>
+      <div class="field">
+        <label for="inflacion">Inflación anual (%)</label>
+        <input type="number" id="inflacion" value="3" step="0.1" min="-50" max="1000">
+        <span class="err" id="err-inflacion"></span>
+      </div>
+      <div class="field">
+        <label for="rendBruto">Rendimiento bruto anual (%)</label>
+        <input type="number" id="rendBruto" value="35" step="0.1" min="-90" max="1000">
+        <span class="err" id="err-rendBruto"></span>
+      </div>
+      <div class="field readonly">
+        <label for="rendReal">Rendimiento real anual (%)</label>
+        <input type="text" id="rendReal" disabled>
+      </div>
+      <div class="field">
+        <label for="moneda">Símbolo de moneda</label>
+        <input type="text" id="moneda" value="$" maxlength="3" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="totalYears">Duración a proyectar (años, máx. 100)</label>
+        <input type="number" id="totalYears" value="25" min="1" max="100">
+        <span class="err" id="err-totalYears"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Valores por defecto</h2>
+    <p class="hint">Se aplican a todos los años a menos que edites una fila puntual en la tabla — dejalos en 0 si preferís llenar todo manualmente.</p>
+    <div class="grid">
+      <div class="field"><label for="defDepMensual">Depósito mensual</label><input type="number" id="defDepMensual" value="800" step="50" min="0"></div>
+      <div class="field"><label for="defDepAnual">Depósito anual</label><input type="number" id="defDepAnual" value="0" step="100" min="0"></div>
+      <div class="field"><label for="defRetMensual">Retiro mensual</label><input type="number" id="defRetMensual" value="0" step="50" min="0"></div>
+      <div class="field"><label for="defRetAnual">Retiro anual</label><input type="number" id="defRetAnual" value="0" step="100" min="0"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Aplicar a un rango</h2>
+    <p class="hint">Por ejemplo: retirar $500/mes solo durante los primeros 3 años. Sobrescribe cualquier edición previa en ese rango de la tabla de abajo.</p>
+    <div class="grid">
+      <div class="field"><label for="rangeFrom">Desde el año</label><input type="number" id="rangeFrom" value="1" min="1"></div>
+      <div class="field"><label for="rangeTo">Hasta el año</label><input type="number" id="rangeTo" value="3" min="1"></div>
+      <div class="field"><label for="rangeTipo">Tipo</label>
+        <select id="rangeTipo">
+          <option value="deposito">Depósito</option>
+          <option value="retiro">Retiro</option>
+        </select>
+      </div>
+      <div class="field"><label for="rangePeriod">Periodicidad</label>
+        <select id="rangePeriod">
+          <option value="mensual">Mensual</option>
+          <option value="anual">Anual</option>
+        </select>
+      </div>
+      <div class="field"><label for="rangeMonto">Monto</label><input type="number" id="rangeMonto" value="500" step="50" min="0"></div>
+    </div>
+    <div class="actions">
+      <button class="ghost primary" id="applyRangeBtn" type="button">Aplicar al rango</button>
+    </div>
+    <p class="note hidden" id="rangeNote"></p>
+  </div>
+
+  <div class="panel">
+    <h2>Equivalencias</h2>
+    <p class="hint">A cuánto equivalen tus valores por defecto, por mes y por día (promedio de 30.44 días por mes).</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th class="left">Concepto</th><th>Por mes</th><th>Por día</th></tr></thead>
+        <tbody>
+          <tr><td>Depósito mensual</td><td class="mono" id="eqDepM"></td><td class="mono" id="eqDepMD"></td></tr>
+          <tr><td>Depósito anual (prorrateado)</td><td class="mono" id="eqDepA"></td><td class="mono" id="eqDepAD"></td></tr>
+          <tr><td>Retiro mensual</td><td class="mono" id="eqRetM"></td><td class="mono" id="eqRetMD"></td></tr>
+          <tr><td>Retiro anual (prorrateado)</td><td class="mono" id="eqRetA"></td><td class="mono" id="eqRetAD"></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="warning hidden" id="warningBox"></div>
+
+  <div class="panel">
+    <h2>Trayectoria del capital</h2>
+    <div id="chartHost"></div>
+  </div>
+
+  <div class="panel">
+    <h2 id="detailTitle">Detalle año a año</h2>
+    <p class="hint" id="detailHint">Editá cualquier celda para ajustar un período puntual — todos los montos se escriben en positivo.</p>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th id="thPeriodo">Año</th>
+            <th class="dep">Depósito mensual</th>
+            <th class="dep">Depósito anual</th>
+            <th class="ret">Retiro mensual</th>
+            <th class="ret">Retiro anual</th>
+            <th>Balance</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+    <div class="actions">
+      <button class="ghost" id="resetBtn" type="button">Restablecer ediciones manuales</button>
+      <span class="save-indicator" id="saveIndicator">Guardado</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Privacidad en este dispositivo <span class="status-pill" id="pinStatus">Sin PIN</span></h2>
+    <p class="hint">Tus datos nunca salen de este dispositivo: se guardan solo acá y no se envían a ningún servidor. Con un PIN además quedan cifrados, para que nadie que use este teléfono o computadora pueda verlos. Si olvidás el PIN, los datos no se pueden recuperar.</p>
+    <div id="pinSetup">
+      <div class="pin-row">
+        <div class="field"><label for="pinNew">Nuevo PIN (mín. 6 dígitos)</label><input type="password" id="pinNew" inputmode="numeric" autocomplete="new-password"></div>
+        <div class="field"><label for="pinConfirm">Repetir PIN</label><input type="password" id="pinConfirm" inputmode="numeric" autocomplete="new-password"></div>
+      </div>
+      <div class="actions">
+        <button class="ghost primary" id="pinEnableBtn" type="button">Activar PIN</button>
+      </div>
+    </div>
+    <div id="pinActive" class="hidden">
+      <div class="actions">
+        <button class="ghost primary" id="lockNowBtn" type="button">Bloquear ahora</button>
+        <button class="ghost" id="pinDisableBtn" type="button">Quitar PIN</button>
+      </div>
+      <p class="note">Se bloquea solo después de 5 minutos fuera de la app.</p>
+    </div>
+    <p class="note hidden" id="pinMsg"></p>
+    <div class="actions">
+      <button class="ghost danger" id="clearAllBtn" type="button">Borrar todos mis datos de este dispositivo</button>
+    </div>
+  </div>
+
+  <footer>Herramienta de proyección educativa — no constituye asesoría financiera. Los rendimientos son supuestos que tú defines.</footer>
+</div>
+</body>
+</html>
